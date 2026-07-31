@@ -1,2 +1,2 @@
 - [Home](/)
-- [LLM Evaluations](llm-evaluations.md)
+- [LLM Evaluation](LLM-evaluation.md)
