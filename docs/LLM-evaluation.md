@@ -258,3 +258,124 @@ flowchart TB
 
 - **Latency Tracking:** Time-To-First-Token (TTFT), overall response duration, and latency under high concurrent loads.
 - **Resource Cost:** Token consumption metrics, cost-per-query tracking, and cache hit ratios.
+
+## Evaluation execution mechanisms & reference frameworks
+
+Evaluation pipelines are driven by **three execution mechanisms**, and structured around **two data-reference strategies**.
+
+### Core execution mechanisms
+
+```mermaid
+flowchart TB
+  Methods[Evaluation Methods]
+  Methods --> Prog[Programmatic<br/>Deterministic]
+  Methods --> Human[Human-based]
+  Methods --> Model[Model-Graded<br/>LLM-as-a-Judge]
+
+  Prog --> P1[Code-based assertions]
+  Prog --> P2[Deterministic / cheap]
+  Prog --> P3["Metrics: Recall@K, Exact Match"]
+
+  Human --> H1[High reliability]
+  Human --> H2[Red teaming / A/B]
+  Human --> H3[High cost / slow]
+
+  Model --> M1[Scalable & nuanced]
+  Model --> M2[Structured rubrics]
+  Model --> M3["Metric: MAE vs experts"]
+```
+
+### 1. Programmatic / deterministic evaluation
+
+- **Mechanism** — Deterministic code logic, regular expressions, or mathematical formulas
+- **Best used for** — Component-level checks, structured classifications, retrieval system validation
+- **Pros / cons** — Extremely fast and cheap; cannot evaluate free-form, subjective, or open-ended semantic text
+
+#### Example: retrieval evaluation via Recall@K
+
+**Objective:** Test whether a RAG retriever fetches correct chunks from a vector database given $K=5$.
+
+$$\text{Recall}@K = \frac{\text{Number of Relevant Retrieved Chunks}}{\text{Total Known Relevant Chunks}}$$
+
+**Workflow:**
+
+1. Input queries to the retriever module
+2. Compare returned chunk IDs against predefined ground-truth chunk IDs via Python assertions
+3. Calculate mean Recall@K across the evaluation dataset
+
+### 2. Human-based evaluation
+
+- **Mechanism** — Subject-matter experts or end-users evaluate model outputs directly
+- **Pros / cons** — Highly reliable, nuanced, gold-standard judgment; expensive, slow, and non-scalable for continuous automated testing
+
+**Key modalities:**
+
+- **Direct grading / rubric scoring** — Experts score outputs (e.g. 1–5) on completeness, tone, etc.
+- **Red teaming** — Adversarial testing to break guardrails and surface vulnerabilities
+- **A/B testing in production** — Live end-user feedback (thumbs up/down, preference selection)
+- **Human-in-the-loop** — Route edge cases or low-confidence outputs to human reviewers
+
+### 3. Model-graded evaluation (LLM-as-a-judge)
+
+- **Mechanism** — An advanced LLM (e.g. GPT-4o, Claude 3.5 Sonnet) with explicit scoring rubrics evaluates candidate outputs
+- **Best used for** — Complex, open-ended semantic evaluation where programmatic rules fail but human grading is too costly
+- **Pros / cons** — Scalable, nuanced, and fast; needs careful prompt design and calibration against human baselines to limit judge bias or drift
+
+#### Example: automated essay scoring alignment
+
+**Objective:** Align an AI grading engine against human subject-matter experts.
+
+**Workflow:**
+
+1. **Golden dataset** — Sample 50–100 student responses graded manually by experts ($Score_{\text{Human}}$)
+2. **Rubric definition** — Multi-dimensional criteria (e.g. structure, argument, evidence)
+3. **Judge prompt execution** — Pass candidate answers + rubric to the LLM judge → $Score_{\text{LLM}}$
+4. **Alignment metric (MAE):**
+
+$$\text{MAE} = \frac{1}{N} \sum_{i=1}^{N} \lvert Score_{\text{LLM}, i} - Score_{\text{Human}, i} \rvert$$
+
+5. **Optimize** — Minimize MAE via prompt engineering, rubric refinement, or switching judge models
+
+### Reference-based vs reference-free frameworks
+
+```mermaid
+flowchart LR
+  subgraph RefBased["Reference-based"]
+    direction TB
+    RB_Q[Input Query] --> RB_Out[System Output]
+    RB_Gold[Golden Data] --> RB_GT[Ground Truth]
+    RB_Out --> RB_Cmp[Compare output vs ground truth]
+    RB_GT --> RB_Cmp
+    RB_Cmp --> RB_Score[Score]
+  end
+
+  subgraph RefFree["Reference-free"]
+    direction TB
+    RF_Q[Input Query] --> RF_Out[System Output]
+    RF_Rubric[Eval Rubric] --> RF_Eval[Evaluate quality against rubric]
+    RF_Out --> RF_Eval
+    RF_Eval --> RF_Score[Score]
+  end
+```
+
+### 1. Reference-based evals
+
+- **Definition** — Compare application output to a known ground-truth / reference answer in the dataset
+- **Data state** — Golden dataset holds pairs: $(\text{Input Query}, \text{Expected Output})$
+
+**Examples:**
+
+- Retriever outputs vs known relevant chunk IDs (Recall@K)
+- AI-generated summary key points vs a human-authored summary
+- MAE between LLM-as-a-judge scores and ground-truth human expert scores
+
+### 2. Reference-free evals
+
+- **Definition** — Score output quality with predefined criteria / rubrics, without a per-item ground-truth answer
+- **Data state** — Dataset holds inputs $(\text{Input Query})$ only — no expected target outputs
+
+**Examples:**
+
+- Rate helpfulness, politeness, or tone on a 1–5 rubric
+- Check toxicity, PII leaks, or guardrail compliance
+- **RAG faithfulness** — Verify generated text is supported _only_ by retrieved context, regardless of the exact wording
