@@ -42,28 +42,18 @@ That setup is **systematic** (curated coverage, not casual inspection), **repeat
 
 Evals split by _what_ you evaluate:
 
-```
-                  ┌──────────────────────────────┐
-                  │       LLM EVALUATIONS        │
-                  └──────────────┬───────────────┘
-                                 │
-         ┌───────────────────────┴───────────────────────┐
-         ▼                                               ▼
-┌──────────────────┐                            ┌──────────────────┐
-│   Model Evals    │                            │ Application Evals│
-└────────┬─────────┘                            └────────┬─────────┘
-         │                                               │
-         ├─ Capabilities:                                ├─ Scope:
-         │  • Reasoning & knowledge                      │  • End-to-end system
-         │  • Code & math                                │  • Sub-components
-         │  • Instruction following                      │    (retrievers, guards, …)
-         │  • Multi-modality & tool use                  │
-         │                                               ├─ Questions:
-         └─ Tools:                                       │  • Is the product reliable?
-            • Standardized benchmarks                    │  • Is context used correctly?
-            • Open leaderboards                          │  • Are outputs safe & fast?
-                                                         │
-                                                         └─ Audience: AI product engineers
+```mermaid
+flowchart TB
+  Root[LLM Evaluations]
+  Root --> Model[Model Evals]
+  Root --> App[Application Evals]
+
+  Model --> Caps["Capabilities:<br/>• Reasoning & knowledge<br/>• Code & math<br/>• Instruction following<br/>• Multi-modality & tool use"]
+  Model --> Tools["Tools:<br/>• Standardized benchmarks<br/>• Open leaderboards"]
+
+  App --> Scope["Scope:<br/>• End-to-end system<br/>• Sub-components<br/>(retrievers, guards, …)"]
+  App --> Questions["Questions:<br/>• Is the product reliable?<br/>• Is context used correctly?<br/>• Are outputs safe & fast?"]
+  App --> Audience[Audience: AI product engineers]
 ```
 
 ### Model evals
@@ -109,45 +99,21 @@ They typically cover:
 
 Evaluating an LLM-powered system follows an iterative engineering lifecycle. Changes to prompts, models, parameters, or retrieval pipelines should show measurable improvement before deployment.
 
-```
-   ┌────────────────────────────────────────────────────────┐
-   │ 1. Define Task, Target & Success Criteria (Metrics)    │
-   └───────────────────────────┬────────────────────────────┘
-                               │
-   ┌───────────────────────────▼────────────────────────────┐
-   │ 2. Build Golden Dataset (50–500 Labeled Examples)      │
-   └───────────────────────────┬────────────────────────────┘
-                               │
-   ┌───────────────────────────▼────────────────────────────┐
-   │ 3. Select Evaluation Method (Code, LLM-as-a-Judge, Human)│
-   └───────────────────────────┬────────────────────────────┘
-                               │
-   ┌───────────────────────────▼────────────────────────────┐
-   │ 4. Execute Application & Compute Evaluation Metrics    │
-   └───────────────────────────┬────────────────────────────┘
-                               │
-            ┌──────────────────┴──────────────────┐
-            │ Iterate & Refine System             │
-            ▼                                     │
-   ┌──────────────────────────────────┐           │
-   │ 5. Failure Analysis & Redesign   │           │
-   │    (Prompts, Models, Routing)    │           │
-   └────────────────┬─────────────────┘           │
-                    │                             │
-                    └───────────► ────────────────┘
-                                  (Repeat until target
-                                   accuracy is met)
-                               │
-                               ▼
-   ┌────────────────────────────────────────────────────────┐
-   │ 6. Deploy to Production & Continuous Monitoring        │
-   └───────────────────────────┬────────────────────────────┘
-                               │ (Feedback Loop: Production
-                               │  failures seed the dataset)
-                               ▼
-   ┌────────────────────────────────────────────────────────┐
-   │ 7. Ingest Production Edge Cases back into Golden Data  │
-   └────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+  S1[1. Define Task, Target & Success Criteria]
+  S2[2. Build Golden Dataset<br/>50–500 labeled examples]
+  S3[3. Select Evaluation Method<br/>Code / LLM-as-a-Judge / Human]
+  S4[4. Execute Application & Compute Metrics]
+  S5[5. Failure Analysis & Redesign<br/>Prompts, Models, Routing]
+  S6[6. Deploy & Continuous Monitoring]
+  S7[7. Ingest Production Edge Cases<br/>into Golden Data]
+
+  S1 --> S2 --> S3 --> S4
+  S4 --> S5
+  S5 -->|Iterate until target accuracy| S4
+  S4 --> S6 --> S7
+  S7 -->|Feedback loop| S2
 ```
 
 ### 1. Problem formulation & metric selection
@@ -213,25 +179,13 @@ A single LLM app rarely uses one eval pipeline. Production systems run **multipl
 
 A single LLM-powered application cannot rely on a single evaluation pipeline. Because modern AI applications consist of interconnected components, failure can occur across distinct architectural layers:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    APPLICATION LAYER                        │
-│ • End-to-End Latency    • Cost Per Request                  │
-│ • Time-to-First-Token   • Throughput / Load Handling        │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                     WORKFLOW LAYER                          │
-│ • Component Interaction  • Priority Misalignment            │
-│ • Error Propagation     • Context Passing Integrity         │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                    COMPONENT LAYER                          │
-│ • Retriever Precision   • Model Hallucination               │
-│ • Output Parsing        • Tool & Parameter Selection        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  App["Application Layer<br/>• End-to-End Latency · Cost Per Request<br/>• Time-to-First-Token · Throughput / Load"]
+  Workflow["Workflow Layer<br/>• Component Interaction · Priority Misalignment<br/>• Error Propagation · Context Passing Integrity"]
+  Component["Component Layer<br/>• Retriever Precision · Model Hallucination<br/>• Output Parsing · Tool & Parameter Selection"]
 
+  App --> Workflow --> Component
 ```
 
 ---
@@ -266,23 +220,25 @@ Focuses on systemic performance and user experience metrics across the complete 
 
 Evaluation pipelines must be tailored to address three distinct dimensions of system risk:
 
-```
-                              ┌──────────────────────────────┐
-                              │     EVALUATION RISKS         │
-                              └──────────────┬───────────────┘
-                                             │
-         ┌───────────────────────────────────┼───────────────────────────────────┐
-         ▼                                   ▼                                   ▼
-┌──────────────────┐                ┌──────────────────┐                ┌──────────────────┐
-│ Quality & Core   │                │ Safety & Security│                │ Operational      │
-│ Functionality    │                │ Guardrails       │                │ Efficiency       │
-└────────┬─────────┘                └────────┬─────────┘                └────────┬─────────┘
-         │                                   │                                   │
-         ├─ Functional Accuracy              ├─ Toxicity & Bias                  ├─ Latency Limits
-         ├─ RAG Groundedness                 ├─ Data Leakage (PII)               ├─ Token Cost
-         ├─ Agent Execution                  └─ Jailbreak Resistance             └─ Request Throughput
-         └─ Context Retention
+```mermaid
+flowchart TB
+  Risks[Evaluation Risks]
+  Risks --> Quality[Quality & Core Functionality]
+  Risks --> Safety[Safety & Security Guardrails]
+  Risks --> Ops[Operational Efficiency]
 
+  Quality --> Q1[Functional Accuracy]
+  Quality --> Q2[RAG Groundedness]
+  Quality --> Q3[Agent Execution]
+  Quality --> Q4[Context Retention]
+
+  Safety --> S1[Toxicity & Bias]
+  Safety --> S2[Data Leakage / PII]
+  Safety --> S3[Jailbreak Resistance]
+
+  Ops --> O1[Latency Limits]
+  Ops --> O2[Token Cost]
+  Ops --> O3[Request Throughput]
 ```
 
 #### 1. Functional Quality & Accuracy
