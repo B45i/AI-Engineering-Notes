@@ -170,11 +170,11 @@ Evaluating an LLM-powered system follows an iterative engineering lifecycle. Cha
 
 Who scores the outputs:
 
-| Method | How it works | Tradeoffs |
-| --- | --- | --- |
-| **Code-based rules** | Automated assertions: string matching, JSON format validation, regex, classification accuracy | Fast, deterministic, cheap |
-| **LLM-as-a-judge** | Stronger model + structured rubrics scores open-ended semantic outputs when code assertions aren’t enough | Flexible for free text; needs calibration |
-| **Human-in-the-loop** | Subject-matter experts inspect outputs | Highly accurate; expensive and slow — mainly for spot-checks or calibrating LLM judges |
+| Method                | How it works                                                                                              | Tradeoffs                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Code-based rules**  | Automated assertions: string matching, JSON format validation, regex, classification accuracy             | Fast, deterministic, cheap                                                             |
+| **LLM-as-a-judge**    | Stronger model + structured rubrics scores open-ended semantic outputs when code assertions aren’t enough | Flexible for free text; needs calibration                                              |
+| **Human-in-the-loop** | Subject-matter experts inspect outputs                                                                    | Highly accurate; expensive and slow — mainly for spot-checks or calibrating LLM judges |
 
 ### 4. Execute & score
 
@@ -202,9 +202,103 @@ This is the loop between steps 4 and 5 until target accuracy is met:
 
 A single LLM app rarely uses one eval pipeline. Production systems run **multiple parallel evals** at different layers:
 
-| Layer | Focus | Examples |
-| --- | --- | --- |
-| **1. Component** | Isolated modules | Retriever precision separate from generator output |
-| **2. System** | End-to-end behavior | Task completion, answer faithfulness |
-| **3. Guardrail & safety** | Policy / abuse | Toxicity, policy violations, prompt-injection resilience |
-| **4. Operational** | Runtime cost & speed | Latency budgets, TTFT, per-request token spend |
+| Layer                     | Focus                | Examples                                                 |
+| ------------------------- | -------------------- | -------------------------------------------------------- |
+| **1. Component**          | Isolated modules     | Retriever precision separate from generator output       |
+| **2. System**             | End-to-end behavior  | Task completion, answer faithfulness                     |
+| **3. Guardrail & safety** | Policy / abuse       | Toxicity, policy violations, prompt-injection resilience |
+| **4. Operational**        | Runtime cost & speed | Latency budgets, TTFT, per-request token spend           |
+
+# Multi-Layer Failure Modes in AI Systems
+
+A single LLM-powered application cannot rely on a single evaluation pipeline. Because modern AI applications consist of interconnected components, failure can occur across distinct architectural layers:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    APPLICATION LAYER                        │
+│ • End-to-End Latency    • Cost Per Request                  │
+│ • Time-to-First-Token   • Throughput / Load Handling        │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│                     WORKFLOW LAYER                          │
+│ • Component Interaction  • Priority Misalignment            │
+│ • Error Propagation     • Context Passing Integrity         │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│                    COMPONENT LAYER                          │
+│ • Retriever Precision   • Model Hallucination               │
+│ • Output Parsing        • Tool & Parameter Selection        │
+└─────────────────────────────────────────────────────────────┘
+
+```
+
+---
+
+### Architectural Levels of Failure
+
+#### 1. Component-Level Failures
+
+Focuses on individual, isolated modules within the application:
+
+- **Retrievers:** Fetching irrelevant context chunks or missing critical information.
+- **Generators:** Hallucination, failure to follow system prompts, or ignoring instructions.
+- **Tools & Parsers:** Invoking APIs with incorrect syntax, missing parameters, or output parsing failures.
+
+#### 2. Workflow & Interaction Failures
+
+Occurs when individual components function properly in isolation, but fail during integration:
+
+- **Priority Misalignment Example:** In a RAG architecture, a retriever may successfully fetch 5 context blocks (including the correct answer in position 5). However, if the generation prompt prioritizes the top positions, the generator may construct an incorrect answer using weaker context from positions 1–4.
+- **Error Propagation:** Slight drift in prompt formatting or context retrieval early in a chain causes compounding errors downstream.
+
+#### 3. Application & Operational Failures
+
+Focuses on systemic performance and user experience metrics across the complete product:
+
+- **Latency Budgets:** A pipeline that returns accurate, grounded responses but takes 12 seconds per turn is unusable in production.
+- **Cost Efficiency:** Excessive token usage or redundant LLM calls driving cost per query beyond budgeted limits.
+
+---
+
+### Comprehensive Taxonomy of Evaluation Risk Categories
+
+Evaluation pipelines must be tailored to address three distinct dimensions of system risk:
+
+```
+                              ┌──────────────────────────────┐
+                              │     EVALUATION RISKS         │
+                              └──────────────┬───────────────┘
+                                             │
+         ┌───────────────────────────────────┼───────────────────────────────────┐
+         ▼                                   ▼                                   ▼
+┌──────────────────┐                ┌──────────────────┐                ┌──────────────────┐
+│ Quality & Core   │                │ Safety & Security│                │ Operational      │
+│ Functionality    │                │ Guardrails       │                │ Efficiency       │
+└────────┬─────────┘                └────────┬─────────┘                └────────┬─────────┘
+         │                                   │                                   │
+         ├─ Functional Accuracy              ├─ Toxicity & Bias                  ├─ Latency Limits
+         ├─ RAG Groundedness                 ├─ Data Leakage (PII)               ├─ Token Cost
+         ├─ Agent Execution                  └─ Jailbreak Resistance             └─ Request Throughput
+         └─ Context Retention
+
+```
+
+#### 1. Functional Quality & Accuracy
+
+- **General LLM Tasks:** Response correctness, conciseness, instruction adherence, and format compliance.
+- **RAG Systems:** Context relevance (retrieval quality), answer groundedness/faithfulness (zero hallucination), and citation accuracy.
+- **Agentic Frameworks:** Tool choice correctness, argument parameter accuracy, task completion rate, and error recovery resilience.
+- **Multi-Turn Chatbots:** Context retention across long conversation threads and proactive intent clarification.
+
+#### 2. Safety & Security Guardrails
+
+- **Toxicity & Harm:** Filtering offensive language, hate speech, or dangerous instructions (e.g., self-harm, illegal acts).
+- **Data Leakage:** Preventing PII, credential leakage, or unauthorized system prompt disclosures.
+- **Adversarial Resilience:** Robustness against prompt injection, jailbreaking techniques, and system override attempts.
+
+#### 3. Operational Performance
+
+- **Latency Tracking:** Time-To-First-Token (TTFT), overall response duration, and latency under high concurrent loads.
+- **Resource Cost:** Token consumption metrics, cost-per-query tracking, and cache hit ratios.
